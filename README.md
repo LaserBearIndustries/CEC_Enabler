@@ -2,7 +2,11 @@
 CEC_Enabler Targets the MiSTer platform to add in CEC Controls to the system, it is d=based on Pico-CEC Project Original Project Readme Below.
 CEC_Enabler uses a RP2040 Zero devboard and a custom designed PCB and housing for a smaller more streamlined device. 
 RGB led support has be added, and this project builds identically to the original project. Use the MiSTer branch for all settings accociated with that platform. 
+![CEC_Enabler](https://github.com/LaserBearIndustries/CEC_Enabler/blob/main/CEC_Enabler.jpg)
 
+
+
+## Original Project
 A Raspberry Pi Pico based project to bridge HDMI CEC (Consumer Electronics
 Control) and USB HID keyboard control (especially for use with Kodi).
 
