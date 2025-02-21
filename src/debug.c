@@ -8,6 +8,7 @@
 #include "pico/stdlib.h"
 
 #include "hdmi-cec.h"
+#include "ws2812.h"
 
 #define BLINK_STACK_SIZE (128)
 #define CEC_STACK_SIZE (512)
@@ -19,12 +20,20 @@ void blink_task(void *param) {
 
   while (true) {
     gpio_put(PICO_DEFAULT_LED_PIN, state);
+    if (state){
+      put_rgb(0x78, 0, 0);
+    }
+    else{
+      put_rgb(0, 0, 0);
+    }
     state = !state;
     vTaskDelay(pdMS_TO_TICKS(blink_delay));
   }
 }
 
 int main() {
+  ws2812_init();
+  put_rgb(0, 0x78, 0);
   static StaticQueue_t xStaticCECQueue;
   static uint8_t storageCECQueue[CEC_QUEUE_LENGTH * sizeof(uint8_t)];
 
@@ -52,8 +61,9 @@ int main() {
   xCECTask = xTaskCreateStatic(cec_task, CEC_TASK_NAME, CEC_STACK_SIZE, &cec_q,
                                configMAX_PRIORITIES - 1, &stackCEC[0], &xCECTCB);
 
-  (void)xBlinkTask;
-  (void)xCECTask;
+  // bind CEC, blink and HID to core 0
+  vTaskCoreAffinitySet(xCECTask, (1 << 0));
+  vTaskCoreAffinitySet(xBlinkTask, (1 << 0));
 
   vTaskStartScheduler();
 
