@@ -8,25 +8,38 @@
 #include "hardware/timer.h"
 #include "pico/stdlib.h"
 
-#include "cec-log.h"
 #include "hdmi-cec.h"
-#include "usb-cdc.h"
 #include "usb_hid.h"
+//#include "pico/stdlib.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
+#include "ws2812.h"
+#include "ws2812.pio.h"
+
 
 #define USBD_STACK_SIZE (512)
 #define HID_STACK_SIZE (256)
-#define CDC_STACK_SIZE (2048)
+#define CDC_STACK_SIZE (768)
 #define BLINK_STACK_SIZE (128)
-#define CEC_STACK_SIZE (2048)
+#define CEC_STACK_SIZE (512)
 #define CEC_QUEUE_LENGTH (16)
+
 
 void blink_task(void *param) {
   static uint32_t blink_delay = 1000;
   static bool state = true;
-
+  //uint8_t cnt = 0;
   while (true) {
     gpio_put(PICO_DEFAULT_LED_PIN, state);
+    
+    if (state){
+      put_rgb(0, 0x80, 0x80);
+    }
+    else{
+      put_rgb(0, 0x4b, 0x4b);
+    }
     state = !state;
+
     vTaskDelay(pdMS_TO_TICKS(blink_delay));
   }
 }
@@ -34,6 +47,10 @@ void blink_task(void *param) {
 void cdc_task(void *param);
 
 int main() {
+  // Get the default PIO (PIO0) and allocate a state machine (SM0)
+  ws2812_init();
+  put_rgb(0, 0x78, 0);
+
   static StaticQueue_t xStaticCECQueue;
   static uint8_t storageCECQueue[CEC_QUEUE_LENGTH * sizeof(uint8_t)];
 
@@ -66,24 +83,25 @@ int main() {
   QueueHandle_t cec_q =
       xQueueCreateStatic(CEC_QUEUE_LENGTH, sizeof(uint8_t), &storageCECQueue[0], &xStaticCECQueue);
 
-  xBlinkTask =
-      xTaskCreateStatic(blink_task, "Blink", BLINK_STACK_SIZE, NULL, 1, &stackBlink[0], &xBlinkTCB);
+  xBlinkTask = xTaskCreateStatic(blink_task, "Blink Task", BLINK_STACK_SIZE, NULL, 1,
+                                 &stackBlink[0], &xBlinkTCB);
   xCECTask = xTaskCreateStatic(cec_task, CEC_TASK_NAME, CEC_STACK_SIZE, &cec_q,
                                configMAX_PRIORITIES - 1, &stackCEC[0], &xCECTCB);
   xHIDTask = xTaskCreateStatic(hid_task, "hid", HID_STACK_SIZE, &cec_q, configMAX_PRIORITIES - 2,
                                &stackHID[0], &xHIDTCB);
   xUSBDTask = xTaskCreateStatic(usb_device_task, "usbd", USBD_STACK_SIZE, NULL,
                                 configMAX_PRIORITIES - 3, &stackUSBD[0], &xUSBDTCB);
-  xCDCTask = xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SIZE, NULL, configMAX_PRIORITIES - 5,
+  xCDCTask = xTaskCreateStatic(cdc_task, "cdc", CDC_STACK_SIZE, NULL, configMAX_PRIORITIES - 4,
                                &stackCDC[0], &xCDCTCB);
 
-  (void)xCECTask;
-  (void)xBlinkTask;
-  (void)xHIDTask;
-  (void)xCDCTask;
-  (void)xUSBDTask;
+  // bind CEC, blink, HID and CDC to core 0
+  vTaskCoreAffinitySet(xCECTask, (1 << 0));
+  vTaskCoreAffinitySet(xBlinkTask, (1 << 0));
+  vTaskCoreAffinitySet(xHIDTask, (1 << 0));
+  vTaskCoreAffinitySet(xCDCTask, (1 << 0));
 
-  cec_log_init();
+  // bind USBD to core 1
+  vTaskCoreAffinitySet(xUSBDTask, (1 << 1));
 
   vTaskStartScheduler();
 
